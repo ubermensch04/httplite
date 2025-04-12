@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include<string>
 
 int main(int argc, char **argv) 
 {
@@ -48,9 +49,10 @@ int main(int argc, char **argv)
     return 1;
   }
   
-  //Connecting to Client
+  //Handling Clients
   while(true)
   {
+    //Connecting to Clients
     struct sockaddr_in client_addr;
     int client_addr_len = sizeof(client_addr);
     std::cout << "Waiting for a client to connect...\n";
@@ -61,7 +63,42 @@ int main(int argc, char **argv)
       std::cerr<<"Accept Failed \n";
       continue;
     }
-    const char* response ="HTTP/1.1 200 OK\r\n\r\n";
+
+    //Reading the request sent by client
+    char buffer[1024];
+    ssize_t bytes_received= read(client_fd,buffer,sizeof(buffer)-1);
+    if(bytes_received>0)
+    {
+      buffer[bytes_received] = '\0';
+      std::cout << "Received: " << buffer << std::endl;
+    }
+    else if (bytes_received == 0) 
+    {
+      std::cout << "Client closed connection." << std::endl;
+    } 
+    else 
+    {
+      std::cerr << "Read failed." << std::endl;
+    }
+
+    std::string request(buffer);
+    std::string request_line=request.substr(0,request.find('\n'));
+    std::string request = "GET /index.html HTTP/1.1";
+
+    size_t start = request.find("/");
+    size_t end = request.find(" HTTP");
+    std::string path = request.substr(start, end - start);
+
+    //Sending response to connected client
+    const char* response;
+    if (path == "/") 
+    {
+      response = "HTTP/1.1 200 OK\r\n\r\n";
+    } else 
+    {
+      response = "HTTP/1.1 404 Not Found\r\n\r\n"; // The 404 response string
+    }
+
     
     if(send(client_fd,response,strlen(response),0)<0)
     {
