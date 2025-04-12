@@ -83,8 +83,7 @@ int main(int argc, char **argv)
 
     std::string request(buffer);
     std::string request_line=request.substr(0,request.find('\n'));
-    std::string request = "GET /index.html HTTP/1.1";
-
+    
     size_t start = request.find("/");
     size_t end = request.find(" HTTP");
     std::string path = request.substr(start, end - start);
@@ -99,7 +98,7 @@ int main(int argc, char **argv)
       response = "HTTP/1.1 404 Not Found\r\n\r\n"; // The 404 response string
     }
 
-    
+
     if(send(client_fd,response,strlen(response),0)<0)
     {
       std::cerr<<"Failed to send the HTTP response"<<std::endl;
