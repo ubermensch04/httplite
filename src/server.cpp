@@ -48,14 +48,29 @@ int main(int argc, char **argv)
     return 1;
   }
   
-  struct sockaddr_in client_addr;
-  int client_addr_len = sizeof(client_addr);
+  //Connecting to Client
+  while(true)
+  {
+    struct sockaddr_in client_addr;
+    int client_addr_len = sizeof(client_addr);
+    std::cout << "Waiting for a client to connect...\n";
+    int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
+    std::cout << "Client connected, FD = "<< client_fd<< std::endl;
+    if(client_fd<0)
+    {
+      std::cerr<<"Accept Failed \n";
+      continue;
+    }
+    const char* response ="HTTP/1.1 200 OK\r\n\r\n";
+    
+    if(send(client_fd,response,strlen(response),0)<0)
+    {
+      std::cerr<<"Failed to send the HTTP response"<<std::endl;
+    }
+    close(client_fd);
+  }
   
-  std::cout << "Waiting for a client to connect...\n";
-  
-  accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
-  std::cout << "Client connected\n";
-  
+
   close(server_fd);
 
   return 0;
