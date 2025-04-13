@@ -112,26 +112,26 @@ int main(int argc, char **argv)
         }
     }
     //Sending response to connected client
-    const char* response;
-    if(req_string.length()==0)
+    std::string response_str;
+    if (path == "/") 
     {
-      std::string status_line = "HTTP/1.1 400 Bad Request\r\n\r\n";
-      response=status_line.c_str();
-    }
-    else
-    { 
-      std::cout<<"Requested String: "<<req_string<<std::endl;
-      std::string status_line= "HTTP/1.1 200 OK\r\n";
-      std::string content_type="Content-Type: text/plain\r\n";
-      std::string content_length="Content-Length: "+ std::to_string(req_string.length())+"\r\n";
+      response_str = "HTTP/1.1 200 OK\r\n\r\n";
+    } 
+    else if (is_echo_path) 
+    {
+      // Build the echo response
+      std::string status_line = "HTTP/1.1 200 OK\r\n";
+      std::string content_type = "Content-Type: text/plain\r\n";
+      std::string content_length = "Content-Length: " + std::to_string(req_string.length()) + "\r\n";
       std::ostringstream oss;
-      oss<<status_line<<content_type<<content_length<<"\r\n"<<req_string;
-      std::string response_str=oss.str();
-      std::cout<<"Response :"<<response_str<<std::endl;
-      response=response_str.c_str();
+      oss << status_line << content_type << content_length << "\r\n" << req_string;
+      response_str = oss.str(); 
+    } 
+    else 
+    {
+      response_str = "HTTP/1.1 404 Not Found\r\n\r\n";
     }
-
-    if(send(client_fd,response,strlen(response),0)<0)
+    if(send(client_fd,response_str.c_str(),response_str.length(),0)<0)
     {
       std::cerr<<"Failed to send the HTTP response"<<std::endl;
     }
