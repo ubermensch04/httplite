@@ -120,12 +120,14 @@ int main(int argc, char **argv)
     }
     else
     { 
+      std::cout<<"Requested String: "<<req_string<<std::endl;
       std::string status_line= "HTTP/1.1 200 OK\r\n";
       std::string content_type="Content-Type: text/plain\r\n";
       std::string content_length="Content-Length: "+ std::to_string(req_string.length())+"\r\n";
       std::ostringstream oss;
       oss<<status_line<<content_type<<content_length<<"\r\n"<<req_string;
       std::string response_str=oss.str();
+      std::cout<<"Response :"<<response_str<<std::endl;
       response=response_str.c_str();
     }
 
