@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include<string>
+#include<sstream>
 
 int main(int argc, char **argv) 
 {
@@ -86,18 +87,47 @@ int main(int argc, char **argv)
     
     size_t start = request.find("/");
     size_t end = request.find(" HTTP");
-    std::string path = request.substr(start, end - start);
+    std::string path;
+    if (start != std::string::npos && end != std::string::npos && start < end) {
+         path = request.substr(start, end - start);
+    } else {
+        std::cerr << "Could not parse path from request line.\n";
+        close(client_fd);
+        continue;
+    }
+    std::cout << "Parsed path: " << path << std::endl;
+    
+    const std::string echo_prefix = "/echo/";
+    std::string req_string="";
+    bool is_echo_path = false;
 
+
+    if (path.rfind(echo_prefix, 0) == 0) 
+    {
+        is_echo_path = true;
+        size_t start_content = echo_prefix.length();
+        if (path.length() > start_content) 
+        {
+            req_string = path.substr(start_content);
+        }
+    }
     //Sending response to connected client
     const char* response;
-    if (path == "/") 
+    if(req_string.length()==0)
     {
-      response = "HTTP/1.1 200 OK\r\n\r\n";
-    } else 
-    {
-      response = "HTTP/1.1 404 Not Found\r\n\r\n"; // The 404 response string
+      std::string status_line = "HTTP/1.1 400 Bad Request\r\n\r\n";
+      response=status_line.c_str();
     }
-
+    else
+    { 
+      std::string status_line= "HTTP/1.1 200 OK\r\n";
+      std::string content_type="Content-Type: text/plain\r\n";
+      std::string content_length="Content-Length: "+ std::to_string(req_string.length())+"\r\n";
+      std::ostringstream oss;
+      oss<<status_line<<content_type<<content_length<<"\r\n"<<req_string;
+      std::string response_str=oss.str();
+      response=response_str.c_str();
+    }
 
     if(send(client_fd,response,strlen(response),0)<0)
     {
