@@ -11,5 +11,6 @@ find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
 
 add_executable(server ${SOURCE_FILES})
+target_include_directories(server PRIVATE src)
 
 target_link_libraries(server PRIVATE Threads::Threads ZLIB::ZLIB)
