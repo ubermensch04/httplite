@@ -4,8 +4,9 @@
 #include <string>
 #include <vector>
 #include <sstream>
-#include <unistd.h> // For read, close
+#include <unistd.h>
 #include <cstring>
+
 
 std::string handle_connection(int client_fd) 
 {
@@ -70,7 +71,7 @@ std::string handle_connection(int client_fd)
       std::ostringstream oss;
       oss << status_line << content_type << content_length << "\r\n" << req_string;
       response_str = oss.str(); 
-    } 
+    }
     else 
     {
       response_str = "HTTP/1.1 404 Not Found\r\n\r\n";
