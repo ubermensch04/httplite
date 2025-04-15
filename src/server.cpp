@@ -13,12 +13,12 @@
 #include<thread>
 
 
-void client_thread(int client_fd)
+void client_thread(int client_fd,const std::string& directory)
 {
   std::cout << "[Thread " << std::this_thread::get_id() << "] Started for FD=" << client_fd << std::endl;
   
   std::string response;
-  response=handle_connection(client_fd);
+  response=handle_connection(client_fd,directory);
 
   if (!response.empty())
   {
@@ -50,10 +50,35 @@ int main(int argc, char **argv)
 
   std::cout << "Argument count: " << argc << "\n";
 
-  for (int i = 0; i < argc; ++i) 
+  std::string directory;
+  if(argc > 1)
   {
-      std::cout << "argv[" << i << "]: " << argv[i] << "\n";
+    if(std::strcmp(argv[1], "--directory"))
+    {
+      if(argc > 2)
+      {
+        directory = argv[2];
+        std::cout << "Directory provided: " << directory << "\n";
+      }
+      else
+      {
+        std::cerr << "Error: --directory flag provided but no path specified.\n";
+        return 1;
+      }
+    }
+    else
+    {
+      std::cerr << "Invalid argument\n";
+      return 1;
+    }
   }
+  else
+  {
+    std::cerr << "No directory provided, using default.\n";
+    directory = "."; // Default directory
+  }
+
+
 
   int server_fd = socket(AF_INET, SOCK_STREAM, 0);
   if (server_fd < 0) 
@@ -102,7 +127,7 @@ int main(int argc, char **argv)
     std::cout << "Main thread: Client connected, FD = " << client_fd << std::endl;
 
     //Creating and detaching thread for each client
-    std::thread t(client_thread, client_fd);
+    std::thread t(client_thread, client_fd,directory);
     std::cout << "Thread created for FD=" << client_fd << std::endl;
     t.detach();
     std::cout << "Main thread: Detached thread for FD=" << client_fd << std::endl;

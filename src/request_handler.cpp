@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <unordered_map>
-
+#include<fstream>
 
 std::string trim(const std::string& str) 
 {
@@ -37,6 +37,7 @@ std::string parse_request_target(std::string& request_line)
 std::unordered_map<std::string, std::string> parse_headers(const std::string& headers_block) // Takes the string block
 {
     std::unordered_map<std::string,std::string> header_data;
+
     std::istringstream header_stream(headers_block);
     std::string line;
     while (std::getline(header_stream, line))
@@ -61,7 +62,7 @@ std::unordered_map<std::string, std::string> parse_headers(const std::string& he
     return header_data;
 }
 
-std::string handle_connection(int client_fd) 
+std::string handle_connection(int client_fd,const std::string& directory) 
 {
     std::string request_data;
     char buffer[1024];
@@ -112,6 +113,7 @@ std::string handle_connection(int client_fd)
     //Generating Response
     std::string response_str;
     const std::string echo_prefix = "/echo/";
+    const std::string file_prefix = "/files/";
     if (request_target == "/") 
     {
       response_str = "HTTP/1.1 200 OK\r\n\r\n";
@@ -126,6 +128,56 @@ std::string handle_connection(int client_fd)
           << "Content-Length: " << req_string.length() << "\r\n"
           << "\r\n"
           << req_string;
+      response_str = oss.str();
+    }
+    else if(request_target.rfind(file_prefix, 0) == 0)
+    {
+      std::string file_name = request_target.substr(file_prefix.length());
+      if (file_name.empty() || file_name.find("..") != std::string::npos) 
+      {
+        std::cerr << "Attempted path traversal or empty filename: " << file_name << "\n";
+        response_str = "HTTP/1.1 400 Bad Request\r\n\r\n";
+        // Early return might be cleaner here if not setting response_str
+        // return "HTTP/1.1 400 Bad Request\r\n\r\n";
+      }
+      else
+      {
+        std::string full_file_path = directory + "/" + file_name;
+        std::ifstream file(full_file_path,std::ios::binary);
+        if(!file)
+        {
+          std::cerr << "File not found: " << full_file_path << "\n";
+          response_str = "HTTP/1.1 404 Not Found\r\n\r\n";
+        }
+        else
+        {
+          //Reading the file contents
+          file.seekg(0, std::ios::end);
+          size_t file_size = file.tellg();
+          file.seekg(0, std::ios::beg);
+          std::string file_content(file_size, '\0');
+          file.read(&file_content[0], file_size);
+  
+          //Generating the response
+          std::ostringstream oss;
+          oss << "HTTP/1.1 200 OK\r\n"
+              << "Content-Type: application/octet-stream\r\n"
+              << "Content-Length: " << file_size << "\r\n"
+              << "\r\n" 
+              << file_content;
+          response_str = oss.str();
+          std::cout << "File sent: " << full_file_path << "\n";
+        }
+      }
+    }
+    else if(request_target=="/headers")
+    {
+      std::ostringstream oss;
+      oss << "HTTP/1.1 200 OK\r\n"
+          << "Content-Type: text/plain\r\n"
+          << "Content-Length: " << headers.length() << "\r\n"
+          << "\r\n" 
+          << headers;
       response_str = oss.str();
     }
     else if(request_target=="/user-agent")
