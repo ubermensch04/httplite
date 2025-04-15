@@ -45,40 +45,30 @@ int main(int argc, char **argv)
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
   
-  // You can use print statements as follows for debugging, they'll be visible when running tests.
   std::cout << "Logs from your program will appear here!\n";
 
   std::cout << "Argument count: " << argc << "\n";
 
   std::string directory;
-  if(argc > 1)
-  {
-    if(std::strcmp(argv[1], "--directory"))
-    {
-      if(argc > 2)
-      {
+  if (argc == 3) { 
+    if (std::strcmp(argv[1], "--directory") == 0) {
         directory = argv[2];
-        std::cout << "Directory provided: " << directory << "\n";
-      }
-      else
-      {
-        std::cerr << "Error: --directory flag provided but no path specified.\n";
+        std::cout << "Serving files from directory: " << directory << "\n";
+    } else {
+        std::cerr << "Error: Invalid flag '" << argv[1] << "'. Expected '--directory <path>'.\n";
         return 1;
-      }
     }
-    else
-    {
-      std::cerr << "Invalid argument\n";
-      return 1;
-    }
+  } 
+  else if (argc == 1) 
+  { // No arguments provided
+     std::cerr << "Warning: No --directory argument provided. Defaulting to '.' but file serving might fail.\n";
+     directory = ".";
+  } 
+  else 
+  { // Incorrect number of arguments
+    std::cerr << "Error: Invalid arguments. Usage: ./server --directory <path>\n";
+    return 1;
   }
-  else
-  {
-    std::cerr << "No directory provided, using default.\n";
-    directory = "."; // Default directory
-  }
-
-
 
   int server_fd = socket(AF_INET, SOCK_STREAM, 0);
   if (server_fd < 0) 
