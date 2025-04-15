@@ -48,6 +48,13 @@ int main(int argc, char **argv)
   // You can use print statements as follows for debugging, they'll be visible when running tests.
   std::cout << "Logs from your program will appear here!\n";
 
+  std::cout << "Argument count: " << argc << "\n";
+
+  for (int i = 0; i < argc; ++i) 
+  {
+      std::cout << "argv[" << i << "]: " << argv[i] << "\n";
+  }
+
   int server_fd = socket(AF_INET, SOCK_STREAM, 0);
   if (server_fd < 0) 
   {
