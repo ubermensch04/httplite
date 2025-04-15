@@ -15,7 +15,7 @@ std::string trim(const std::string& str)
 {
   size_t first = str.find_first_not_of(" \t\r\n");
   if (std::string::npos == first) {
-      return ""; // Return empty if all whitespace
+      return "";
   }
   size_t last = str.find_last_not_of(" \t\r\n");
   return str.substr(first, (last - first + 1));
@@ -37,7 +37,6 @@ std::string parse_request_target(std::string& request_line)
 std::unordered_map<std::string, std::string> parse_headers(const std::string& headers_block) // Takes the string block
 {
     std::unordered_map<std::string,std::string> header_data;
-    // Use the input parameter string here
     std::istringstream header_stream(headers_block);
     std::string line;
     while (std::getline(header_stream, line))

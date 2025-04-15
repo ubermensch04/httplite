@@ -9,7 +9,35 @@
 #include <netdb.h>
 #include<string>
 #include<sstream>
-#include<request_handler.h>
+#include"request_handler.h"
+#include<thread>
+
+
+void client_thread(int client_fd)
+{
+  std::cout << "[Thread " << std::this_thread::get_id() << "] Started for FD=" << client_fd << std::endl;
+  
+  std::string response;
+  response=handle_connection(client_fd);
+
+  if (!response.empty())
+  {
+    if(send(client_fd,response.c_str(),response.length(),0)<0)
+    {
+      std::cerr << "[Thread " << std::this_thread::get_id() << "] Failed to send response for FD=" << client_fd << std::endl;
+    }
+    else 
+    {
+      std::cout << "[Thread " << std::this_thread::get_id() << "] Sent response to FD=" << client_fd << std::endl;
+    }
+  }
+  else
+  {
+    std::cerr << "[Thread " << std::this_thread::get_id() << "] Handler failed for FD=" << client_fd << ", no response sent." << std::endl;
+  }
+  close(client_fd);
+  std::cout << "[Thread " << std::this_thread::get_id() << "] Finished, closed FD=" << client_fd << std::endl;
+}
 
 int main(int argc, char **argv) 
 {
@@ -59,32 +87,19 @@ int main(int argc, char **argv)
     int client_addr_len = sizeof(client_addr);
     std::cout << "Waiting for a client to connect...\n";
     int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
-    std::cout << "Client connected, FD = "<< client_fd<< std::endl;
     if(client_fd<0)
     {
-      std::cerr<<"Accept Failed \n";
+      std::cerr << "Main thread: Accept Failed\n";
       continue;
     }
+    std::cout << "Main thread: Client connected, FD = " << client_fd << std::endl;
 
-    std::string response;
-    response=handle_connection(client_fd);
-    if (!response.empty())
-    {
-      if(send(client_fd,response.c_str(),response.length(),0)<0)
-      {
-        std::cerr<<"Failed to send the HTTP response"<<std::endl;
-      }
-      else 
-      {
-        std::cout << "Sent response to FD=" << client_fd << std::endl;
-      }
-    }
-    else
-    {
-      std::cerr << "Handler failed for FD=" << client_fd << ", no response sent." << std::endl;
-    }
-    close(client_fd);
-    std::cout << "Closed connection for FD = " << client_fd << std::endl;
+    //Creating and detaching thread for each client
+    std::thread t(client_thread, client_fd);
+    std::cout << "Thread created for FD=" << client_fd << std::endl;
+    t.detach();
+    std::cout << "Main thread: Detached thread for FD=" << client_fd << std::endl;
+
   }
   
 
