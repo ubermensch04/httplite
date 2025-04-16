@@ -220,7 +220,6 @@ std::string handle_connection(int client_fd,const std::string& directory)
   char buffer[1024];
   const std::string EOH="\r\n\r\n";
   ssize_t bytes_received;
-  size_t content_length=0;
   // Read the request data from the client
 
   size_t eoh_pos;
@@ -234,8 +233,8 @@ std::string handle_connection(int client_fd,const std::string& directory)
   }
 
   // Parse headers first
-  std::string headers = request_data.substr(0, eoh_pos);
-  auto header_data = parse_headers(headers);
+  std::string header_block = request_data.substr(0, eoh_pos);
+  auto header_data = parse_headers(header_block);
 
   // Get content length
   size_t content_length = 0;
