@@ -236,38 +236,11 @@ std::string handle_connection(int client_fd,const std::string& directory)
   std::string header_block = request_data.substr(0, eoh_pos);
   auto header_data = parse_headers(header_block);
 
-  // Get content length
-  size_t content_length = 0;
-  if (header_data.count("content-length")) {
-      try {
-          content_length = std::stoul(header_data["content-length"]);
-      } catch (...) {
-          return "HTTP/1.1 400 Bad Request\r\n\r\n";
-      }
-  }
-  else {
-      std::cerr << "Content-Length header not found\n";
-      return "HTTP/1.1 400 Bad Request\r\n\r\n";
-  }
-
-  // Read remaining body data
-  size_t body_bytes_received = request_data.size() - (eoh_pos + 4);
-  while (body_bytes_received < content_length) 
-  {
-    bytes_received = read(client_fd, buffer, sizeof(buffer));
-    if (bytes_received <= 0) {
-        std::cerr << "Connection closed during body\n";
-        return "";
-    }
-    request_data.append(buffer, bytes_received);
-    body_bytes_received += bytes_received;
-  }
 
   // Now parse components
   size_t first_crlf = request_data.find("\r\n");
   std::string request_line = request_data.substr(0, first_crlf);
   std::string headers = request_data.substr(first_crlf + 2, eoh_pos - (first_crlf + 2));
-  std::string body = request_data.substr(eoh_pos + 4, content_length);
 
   //Finding the request method
   size_t method_end = request_line.find(' ');
@@ -293,6 +266,33 @@ std::string handle_connection(int client_fd,const std::string& directory)
   else if(strcmp(method.c_str(),"POST")==0)
   {
     std::cout << "POST request received\n";
+    // Get content length
+    size_t content_length = 0;
+    if (header_data.count("content-length")) {
+        try {
+            content_length = std::stoul(header_data["content-length"]);
+        } catch (...) {
+            return "HTTP/1.1 400 Bad Request\r\n\r\n";
+        }
+    }
+    else {
+        std::cerr << "Content-Length header not found\n";
+        return "HTTP/1.1 400 Bad Request\r\n\r\n";
+    }
+
+    // Read remaining body data
+    size_t body_bytes_received = request_data.size() - (eoh_pos + 4);
+    while (body_bytes_received < content_length) 
+    {
+      bytes_received = read(client_fd, buffer, sizeof(buffer));
+      if (bytes_received <= 0) {
+          std::cerr << "Connection closed during body\n";
+          return "";
+      }
+      request_data.append(buffer, bytes_received);
+      body_bytes_received += bytes_received;
+    }
+    std::string body = request_data.substr(eoh_pos + 4, content_length);
     response_str=handle_POST_request(request_target,directory,headers,body);
   }
   else
