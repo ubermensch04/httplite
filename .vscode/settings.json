@@ -19,6 +19,13 @@
         "typeinfo": "cpp",
         "iostream": "cpp",
         "*.tcc": "cpp",
-        "sstream": "cpp"
+        "sstream": "cpp",
+        "chrono": "cpp",
+        "ctime": "cpp",
+        "ratio": "cpp",
+        "fstream": "cpp",
+        "semaphore": "cpp",
+        "stop_token": "cpp",
+        "thread": "cpp"
     }
 }
