@@ -177,6 +177,9 @@ std::string handle_PUT_request(const std::string& request_target, const std::str
     {
       std::string full_file_path=directory+"/"+file_name;
       std::ofstream file(full_file_path,std::ios::binary);
+      std::cout<<"Writing to file: "<<full_file_path<<"\n";
+      std::cout<<"Body : "<<body<<"\n";
+      
       file.write(body.c_str(), body.length());
       if(file)
       {
