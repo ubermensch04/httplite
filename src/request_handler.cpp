@@ -157,7 +157,7 @@ std::string handle_GET_request(const std::string& request_target, const std::str
     
 }
 
-std::string handle_PUT_request(const std::string& request_target, const std::string& directory, const std::string& headers, const std::string& body) 
+std::string handle_POST_request(const std::string& request_target, const std::string& directory, const std::string& headers, const std::string& body) 
 {
   //Storing Header data in a HashMap
   std::unordered_map<std::string,std::string> header_data;
@@ -165,101 +165,142 @@ std::string handle_PUT_request(const std::string& request_target, const std::str
   
   std::string response_str;
   const std::string file_prefix = "/files/";
-  if(request_target.rfind(file_prefix, 0) == 0)
+
+  if(request_target.rfind(file_prefix, 0) != 0) 
   {
-    std::string file_name = request_target.substr(file_prefix.length());
-    if(file_name.empty())
-    {
-      std::cerr << "Empty filename in PUT request\n";
-      response_str = "HTTP/1.1 400 Bad Request\r\n\r\n";
-    }
-    else
-    {
-      std::string full_file_path=directory+"/"+file_name;
-      std::ofstream file(full_file_path,std::ios::binary);
-      std::cout<<"Writing to file: "<<full_file_path<<"\n";
-      std::cout<<"Body : "<<body<<"\n";
-      
-      file.write(body.c_str(), body.length());
-      if(file)
-      {
-        std::cout << "File created: " << full_file_path << "\n";
-        response_str = "HTTP/1.1 201 Created\r\n\r\n";
-      }
-      else
-      {
-        std::cerr << "Failed to create file: " << full_file_path << "\n";
-        response_str = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
-      }
-    }
+    return "HTTP/1.1 404 Not Found\r\n\r\n";
   }
+  
+  std::string file_name = request_target.substr(file_prefix.length());
+
+  if(file_name.empty()|| file_name.find("..") != std::string::npos)
+  {
+    std::cerr << "Empty filename in PUT request\n";
+    return "HTTP/1.1 400 Bad Request\r\n\r\n";
+  }
+  
+  size_t content_length=0;
+  if(header_data.find("content-length")!=header_data.end())
+  {
+    content_length=std::stoul(header_data["content-length"]);
+  }
+  else
+  {
+    std::cerr << "Content-Length header not found\n";
+    return "HTTP/1.1 400 Bad Request\r\n\r\n";
+  }
+
+  if(body.length() != content_length) {
+    std::cerr << "Body length mismatch. Expected: " << content_length
+              << ", Received: " << body.length() << "\n";
+    return "HTTP/1.1 400 Bad Request\r\n\r\n";
+}
+
+  std::string full_file_path=directory+"/"+file_name;
+  std::ofstream file(full_file_path,std::ios::binary);
+  std::cout<<"Writing to file: "<<full_file_path<<"\n";
+  std::cout<<"Body : "<<body<<"\n";
+
+  if(file.write(body.data(), body.size())) 
+  {
+    return "HTTP/1.1 201 Created\r\n\r\n";
+  } 
+  else 
+  {
+    std::cerr << "File write failed: " << full_file_path << "\n";
+    return "HTTP/1.1 500 Internal Server Error\r\n\r\n";
+  }
+  
+  
   return response_str;
 }
 std::string handle_connection(int client_fd,const std::string& directory) 
 {
-    std::string request_data;
-    char buffer[1024];
-    const std::string EOH="\r\n\r\n";
-    ssize_t bytes_received;
+  std::string request_data;
+  char buffer[1024];
+  const std::string EOH="\r\n\r\n";
+  ssize_t bytes_received;
+  size_t content_length=0;
+  // Read the request data from the client
 
-    // Read the request data from the client
-    while (true)
-    {
-        bytes_received=read(client_fd,buffer,sizeof(buffer));
-        if(bytes_received<=0)
-        {
-          std::cerr<<"Error reading from client socket or connection closed\n";
+  size_t eoh_pos;
+  while ((eoh_pos = request_data.find("\r\n\r\n")) == std::string::npos) {
+      bytes_received = read(client_fd, buffer, sizeof(buffer));
+      if (bytes_received <= 0) {
+          std::cerr << "Connection closed before headers\n";
           return "";
-        }
-        else
-        {
-          request_data.append(buffer,bytes_received);
-        }
-    }
+      }
+      request_data.append(buffer, bytes_received);
+  }
 
-    //Storing the request line
-    size_t first_crlf = request_data.find("\r\n");
-    if (first_crlf == std::string::npos) 
-    {
-        std::cerr << "Invalid request data\n";
+  // Parse headers first
+  std::string headers = request_data.substr(0, eoh_pos);
+  auto header_data = parse_headers(headers);
+
+  // Get content length
+  size_t content_length = 0;
+  if (header_data.count("content-length")) {
+      try {
+          content_length = std::stoul(header_data["content-length"]);
+      } catch (...) {
+          return "HTTP/1.1 400 Bad Request\r\n\r\n";
+      }
+  }
+  else {
+      std::cerr << "Content-Length header not found\n";
+      return "HTTP/1.1 400 Bad Request\r\n\r\n";
+  }
+
+  // Read remaining body data
+  size_t body_bytes_received = request_data.size() - (eoh_pos + 4);
+  while (body_bytes_received < content_length) 
+  {
+    bytes_received = read(client_fd, buffer, sizeof(buffer));
+    if (bytes_received <= 0) {
+        std::cerr << "Connection closed during body\n";
         return "";
     }
-    std::string request_line=request_data.substr(0,first_crlf);
-    size_t EOH_pos = request_data.find(EOH);
-    std::string headers=request_data.substr(first_crlf+2,EOH_pos-first_crlf-2);
-    std::string body=request_data.substr(EOH_pos+4);
+    request_data.append(buffer, bytes_received);
+    body_bytes_received += bytes_received;
+  }
 
-    //Finding the request method
-    size_t method_end = request_line.find(' ');
-    if (method_end == std::string::npos) 
-    {
-        std::cerr << "Invalid request line\n";
-        return "";
-    }
-    std::string method = request_line.substr(0, method_end);
+  // Now parse components
+  size_t first_crlf = request_data.find("\r\n");
+  std::string request_line = request_data.substr(0, first_crlf);
+  std::string headers = request_data.substr(first_crlf + 2, eoh_pos - (first_crlf + 2));
+  std::string body = request_data.substr(eoh_pos + 4, content_length);
 
-    //Finding Request Target
-    std::string request_target=parse_request_target(request_line);
-    if (request_target.empty()) 
-    { 
-      return ""; 
-    }
-
-    std::string response_str;
-    if(strcmp(method.c_str(),"GET")==0)
-    {
-      response_str=handle_GET_request(request_target,directory,headers);
-    }
-    else if(strcmp(method.c_str(),"POST")==0)
-    {
-      std::cout << "POST request received\n";
-      response_str=handle_PUT_request(request_target,directory,headers,body);
-    }
-    else
-    {
-      std::cerr << "Unsupported HTTP method: " << method << "\n";
+  //Finding the request method
+  size_t method_end = request_line.find(' ');
+  if (method_end == std::string::npos) 
+  {
+      std::cerr << "Invalid request line\n";
       return "";
-    }
-    
-    return response_str;
+  }
+  std::string method = request_line.substr(0, method_end);
+
+  //Finding Request Target
+  std::string request_target=parse_request_target(request_line);
+  if (request_target.empty()) 
+  { 
+    return ""; 
+  }
+
+  std::string response_str;
+  if(strcmp(method.c_str(),"GET")==0)
+  {
+    response_str=handle_GET_request(request_target,directory,headers);
+  }
+  else if(strcmp(method.c_str(),"POST")==0)
+  {
+    std::cout << "POST request received\n";
+    response_str=handle_POST_request(request_target,directory,headers,body);
+  }
+  else
+  {
+    std::cerr << "Unsupported HTTP method: " << method << "\n";
+    return "";
+  }
+  
+  return response_str;
 }
