@@ -1,6 +1,6 @@
 # HTTPlite
 
-The goal is to build a functional HTTP/1.1 server from scratch to understand the fundamentals of the protocol and low-level network programming using TCP sockets in C++. It follows the incremental stages provided by the Codecrafters platform, starting from basic socket binding to handling file uploads and concurrency.
+The goal is to build a functional HTTP/1.1 server from scratch to understand the fundamentals of the protocol and low-level network programming using TCP sockets in C++.
 
 ## Features Implemented (So Far)
 
