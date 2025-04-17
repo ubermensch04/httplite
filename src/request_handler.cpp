@@ -95,9 +95,7 @@ std::string handle_GET_request(const std::string& request_target, const std::str
     if (file_name.empty() || file_name.find("..") != std::string::npos) 
     {
       std::cerr << "Attempted path traversal or empty filename: " << file_name << "\n";
-      response_str = "HTTP/1.1 400 Bad Request\r\n\r\n";
-      // Early return might be cleaner here if not setting response_str
-      // return "HTTP/1.1 400 Bad Request\r\n\r\n";
+      response_str = "HTTP/1.1 400 Bad Request\r\n\r\n";;
     }
     else
     {
@@ -232,12 +230,12 @@ std::string handle_connection(int client_fd,const std::string& directory)
       request_data.append(buffer, bytes_received);
   }
 
-  // Parse headers first
+  // Parsing headers first
   std::string header_block = request_data.substr(0, eoh_pos);
   auto header_data = parse_headers(header_block);
 
 
-  // Now parse components
+  // Now parsing components
   size_t first_crlf = request_data.find("\r\n");
   std::string request_line = request_data.substr(0, first_crlf);
   std::string headers = request_data.substr(first_crlf + 2, eoh_pos - (first_crlf + 2));
@@ -280,7 +278,7 @@ std::string handle_connection(int client_fd,const std::string& directory)
         return "HTTP/1.1 400 Bad Request\r\n\r\n";
     }
 
-    // Read remaining body data
+    // Reading remaining body data
     size_t body_bytes_received = request_data.size() - (eoh_pos + 4);
     while (body_bytes_received < content_length) 
     {
