@@ -10,6 +10,7 @@
 #include <cctype>
 #include <unordered_map>
 #include<fstream>
+#include<zlib.h>
 
 std::string trim(const std::string& str) 
 {
@@ -62,6 +63,46 @@ std::unordered_map<std::string, std::string> parse_headers(const std::string& he
     return header_data;
 }
 
+std::string gzip_compress(const std::string& str) 
+{
+    if(str.empty()) 
+    {
+        return str;
+    }
+
+    z_stream zs;
+    memset(&zs, 0, sizeof(zs));
+
+    if (deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 | 16, 8, Z_DEFAULT_STRATEGY) != Z_OK) 
+    {
+      throw std::runtime_error("deflateInit2 failed");
+    }
+
+    zs.next_in = (Bytef*)str.data();
+    zs.avail_in = static_cast<uInt>(str.size());
+
+    int ret;
+    std::vector<char> compressed_buffer(deflateBound(&zs, str.size()));
+    zs.next_out=(Bytef*)compressed_buffer.data();
+    zs.avail_out = static_cast<uInt>(compressed_buffer.size());
+
+    ret = deflate(&zs, Z_FINISH);
+    if (ret != Z_STREAM_END) 
+    {
+        deflateEnd(&zs);
+        throw std::runtime_error("deflate failed");
+    }
+
+    if (deflateEnd(&zs) != Z_OK) 
+    {
+       std::cerr << "Warning: deflateEnd failed." << std::endl;
+    }
+    size_t compressed_size = zs.total_out;
+
+    // Return the compressed data as a string
+    return std::string(compressed_buffer.data(), compressed_size);
+
+}
 std::string handle_GET_request(const std::string& request_target, const std::string& directory, const std::string& headers) 
 {
   //Storing Header data in a HashMap
@@ -82,11 +123,57 @@ std::string handle_GET_request(const std::string& request_target, const std::str
     
     std::string req_string = request_target.substr(echo_prefix.length());
     std::ostringstream oss;
-    oss << "HTTP/1.1 200 OK\r\n"
-        << "Content-Type: text/plain\r\n"
-        << "Content-Length: " << req_string.length() << "\r\n"
-        << "\r\n"
-        << req_string;
+    bool apply_gzip = false;
+
+    auto it = header_data.find("accept-encoding");
+    if (it != header_data.end()) 
+    {
+
+        std::string supported_encodings = it->second;
+        if (supported_encodings.find("gzip") != std::string::npos) {
+            apply_gzip = true;
+            std::cout << "Client accepts gzip. Applying compression." << std::endl;
+        } else {
+            std::cout << "Client does not accept gzip (Accept-Encoding: " << supported_encodings << ")" << std::endl;
+        }
+    } else 
+    {
+        std::cout << "No Accept-Encoding header received." << std::endl;
+    }
+
+    if (apply_gzip) 
+    {
+        try {
+            std::string compressed_body = gzip_compress(req_string);
+            oss << "HTTP/1.1 200 OK\r\n";
+            oss << "Content-Type: text/plain\r\n"; 
+            oss << "Content-Encoding: gzip\r\n";
+            oss << "Content-Length: " << compressed_body.length() << "\r\n";
+            oss << "\r\n"; 
+            oss << compressed_body; 
+        } catch (const std::runtime_error& e) 
+        {
+            std::cerr << "Gzip compression failed: " << e.what() << std::endl;
+            // For now, let's send uncompressed as a fallback:
+            oss.str(""); 
+            oss.clear(); 
+            oss << "HTTP/1.1 200 OK\r\n"
+                << "Content-Type: text/plain\r\n"
+                << "Content-Length: " << req_string.length() << "\r\n"
+                << "\r\n"
+                << req_string;
+        }
+    } 
+    else 
+    {
+        // Build uncompressed response
+        oss << "HTTP/1.1 200 OK\r\n"
+            << "Content-Type: text/plain\r\n"
+            << "Content-Length: " << req_string.length() << "\r\n"
+            << "\r\n"
+            << req_string;
+    }
+
     response_str = oss.str();
   }
   else if(request_target.rfind(file_prefix, 0) == 0)
@@ -96,8 +183,6 @@ std::string handle_GET_request(const std::string& request_target, const std::str
     {
       std::cerr << "Attempted path traversal or empty filename: " << file_name << "\n";
       response_str = "HTTP/1.1 400 Bad Request\r\n\r\n";
-      // Early return might be cleaner here if not setting response_str
-      // return "HTTP/1.1 400 Bad Request\r\n\r\n";
     }
     else
     {
@@ -157,13 +242,9 @@ std::string handle_GET_request(const std::string& request_target, const std::str
     
 }
 
-std::string handle_POST_request(const std::string& request_target, const std::string& directory, const std::string& headers, const std::string& body) 
+std::string handle_POST_request(const std::string& request_target, const std::string& directory, const std::unordered_map<std::string,std::string> header_data, const std::string& body) 
 {
-  //Storing Header data in a HashMap
-  std::unordered_map<std::string,std::string> header_data;
-  header_data=parse_headers(headers);
   
-  std::string response_str;
   const std::string file_prefix = "/files/";
 
   if(request_target.rfind(file_prefix, 0) != 0) 
@@ -182,7 +263,7 @@ std::string handle_POST_request(const std::string& request_target, const std::st
   size_t content_length=0;
   if(header_data.find("content-length")!=header_data.end())
   {
-    content_length=std::stoul(header_data["content-length"]);
+    content_length=std::stoul(header_data.at("content-length"));
   }
   else
   {
@@ -211,8 +292,6 @@ std::string handle_POST_request(const std::string& request_target, const std::st
     return "HTTP/1.1 500 Internal Server Error\r\n\r\n";
   }
   
-  
-  return response_str;
 }
 std::string handle_connection(int client_fd,const std::string& directory) 
 {
@@ -231,11 +310,6 @@ std::string handle_connection(int client_fd,const std::string& directory)
       }
       request_data.append(buffer, bytes_received);
   }
-
-  // Parse headers first
-  std::string header_block = request_data.substr(0, eoh_pos);
-  auto header_data = parse_headers(header_block);
-
 
   // Now parse components
   size_t first_crlf = request_data.find("\r\n");
@@ -266,6 +340,7 @@ std::string handle_connection(int client_fd,const std::string& directory)
   else if(strcmp(method.c_str(),"POST")==0)
   {
     std::cout << "POST request received\n";
+    std::unordered_map<std::string,std::string> header_data = parse_headers(headers);
     // Get content length
     size_t content_length = 0;
     if (header_data.count("content-length")) {
@@ -293,7 +368,7 @@ std::string handle_connection(int client_fd,const std::string& directory)
       body_bytes_received += bytes_received;
     }
     std::string body = request_data.substr(eoh_pos + 4, content_length);
-    response_str=handle_POST_request(request_target,directory,headers,body);
+    response_str=handle_POST_request(request_target,directory,header_data,body);
   }
   else
   {

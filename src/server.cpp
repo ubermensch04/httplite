@@ -45,7 +45,7 @@ int main(int argc, char **argv)
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
   
-  std::cout << "Logs from your program will appear here!\n";
+  std::cout << "Logs from program will appear here!\n";
 
   std::cout << "Argument count: " << argc << "\n";
 
@@ -77,7 +77,7 @@ int main(int argc, char **argv)
    return 1;
   }
   
-  // Since the tester restarts your program quite often, setting SO_REUSEADDR
+  //setting SO_REUSEADDR
   // ensures that we don't run into 'Address already in use' errors
   int reuse = 1;
   if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
