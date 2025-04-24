@@ -8,7 +8,6 @@
 #include <cstring>
 #include <algorithm>
 #include <cctype>
-#include <unordered_map>
 #include<fstream>
 #include<zlib.h>
 
@@ -293,88 +292,42 @@ std::string handle_POST_request(const std::string& request_target, const std::st
   }
   
 }
-std::string handle_connection(int client_fd,const std::string& directory) 
+std::pair<std::string, bool> handle_connection(const std::string& request_line, const std::string& headers, const std::string& body, const std::string& directory)
 {
-  std::string request_data;
-  char buffer[1024];
-  const std::string EOH="\r\n\r\n";
-  ssize_t bytes_received;
-  // Read the request data from the client
-
-  size_t eoh_pos;
-  while ((eoh_pos = request_data.find("\r\n\r\n")) == std::string::npos) {
-      bytes_received = read(client_fd, buffer, sizeof(buffer));
-      if (bytes_received <= 0) {
-          std::cerr << "Connection closed before headers\n";
-          return "";
-      }
-      request_data.append(buffer, bytes_received);
-  }
-
-  // Now parse components
-  size_t first_crlf = request_data.find("\r\n");
-  std::string request_line = request_data.substr(0, first_crlf);
-  std::string headers = request_data.substr(first_crlf + 2, eoh_pos - (first_crlf + 2));
-
-  //Finding the request method
+  // Parse request line to get method and target
   size_t method_end = request_line.find(' ');
-  if (method_end == std::string::npos) 
-  {
-      std::cerr << "Invalid request line\n";
-      return "";
-  }
-  std::string method = request_line.substr(0, method_end);
-
-  //Finding Request Target
-  std::string request_target=parse_request_target(request_line);
-  if (request_target.empty()) 
-  { 
-    return ""; 
-  }
-
-  std::string response_str;
-  if(strcmp(method.c_str(),"GET")==0)
-  {
-    response_str=handle_GET_request(request_target,directory,headers);
-  }
-  else if(strcmp(method.c_str(),"POST")==0)
-  {
-    std::cout << "POST request received\n";
-    std::unordered_map<std::string,std::string> header_data = parse_headers(headers);
-    // Get content length
-    size_t content_length = 0;
-    if (header_data.count("content-length")) {
-        try {
-            content_length = std::stoul(header_data["content-length"]);
-        } catch (...) {
-            return "HTTP/1.1 400 Bad Request\r\n\r\n";
-        }
-    }
-    else {
-        std::cerr << "Content-Length header not found\n";
-        return "HTTP/1.1 400 Bad Request\r\n\r\n";
-    }
-
-    // Read remaining body data
-    size_t body_bytes_received = request_data.size() - (eoh_pos + 4);
-    while (body_bytes_received < content_length) 
-    {
-      bytes_received = read(client_fd, buffer, sizeof(buffer));
-      if (bytes_received <= 0) {
-          std::cerr << "Connection closed during body\n";
-          return "";
-      }
-      request_data.append(buffer, bytes_received);
-      body_bytes_received += bytes_received;
-    }
-    std::string body = request_data.substr(eoh_pos + 4, content_length);
-    response_str=handle_POST_request(request_target,directory,header_data,body);
-  }
-  else
-  {
-    std::cerr << "Unsupported HTTP method: " << method << "\n";
-    return "";
+  if (method_end == std::string::npos) {
+      return {"HTTP/1.1 400 Bad Request\r\n\r\n", false};
   }
   
-  return response_str;
+  std::string method = request_line.substr(0, method_end);
+  std::string request_target = parse_request_target(const_cast<std::string&>(request_line));
+  
+  if (request_target.empty()) {
+      return {"HTTP/1.1 400 Bad Request\r\n\r\n", false};
+  }
+  
+  // Parse headers to check for Connection: close
+  std::unordered_map<std::string, std::string> header_data = parse_headers(headers);
+  bool keep_alive = true; // Default for HTTP/1.1
+  
+  auto connection_it = header_data.find("connection");
+  if (connection_it != header_data.end()) {
+      if (connection_it->second == "close") {
+          keep_alive = false;
+      }
+  }
+  
+  // Handle request based on method
+  std::string response;
+  if (method == "GET") {
+      response = handle_GET_request(request_target, directory, headers);
+  } else if (method == "POST") {
+      response = handle_POST_request(request_target, directory, header_data, body);
+  } else {
+      response = "HTTP/1.1 501 Not Implemented\r\n\r\n";
+  }
+  
+  return {response, keep_alive};
 }
+
