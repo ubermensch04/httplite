@@ -17,23 +17,109 @@ void client_thread(int client_fd,const std::string& directory)
 {
   std::cout << "[Thread " << std::this_thread::get_id() << "] Started for FD=" << client_fd << std::endl;
   
-  std::string response;
-  response=handle_connection(client_fd,directory);
-
-  if (!response.empty())
+  bool keep_connection_alive = true;
+  while(keep_connection_alive)
   {
-    if(send(client_fd,response.c_str(),response.length(),0)<0)
+    // Read request data
+    std::string request_data;
+    char buffer[1024];
+    const std::string EOH = "\r\n\r\n";
+    ssize_t bytes_received;
+
+    //Reading headers
+    size_t eoh_pos;
+    while((eoh_pos = request_data.find("\r\n\r\n")) == std::string::npos) 
     {
-      std::cerr << "[Thread " << std::this_thread::get_id() << "] Failed to send response for FD=" << client_fd << std::endl;
+      bytes_received = read(client_fd, buffer, sizeof(buffer));
+      if (bytes_received <= 0) 
+      {
+          std::cout << "[Thread " << std::this_thread::get_id() 
+                    << "] Connection closed by client or error" << std::endl;
+          keep_connection_alive = false;
+          break;
+      }
+      request_data.append(buffer, bytes_received);
+        
     }
+    if (!keep_connection_alive) 
+    {
+        break;
+    }
+    //Parsing request line and headers
+    size_t first_crlf = request_data.find("\r\n");
+    std::string request_line = request_data.substr(0, first_crlf);
+    std::string headers = request_data.substr(first_crlf + 2, eoh_pos - (first_crlf + 2));
+    std::cout << "[Thread " << std::this_thread::get_id() << "] Request line: " << request_line << std::endl;
+    size_t method_end = request_line.find(' ');
+    if (method_end == std::string::npos) 
+    {
+        std::cerr << "[Thread " << std::this_thread::get_id() << "] Invalid request line\n";
+        keep_connection_alive = false;
+        break;
+    }
+    std::string method= request_line.substr(0, method_end);
+
+    std::unordered_map<std::string, std::string> header_data = parse_headers(headers);
+
+    std::string body;
+    if(method=="POST")
+    {
+      if(header_data.find("content-length") != header_data.end())
+      {
+        size_t content_length =std::stoul(header_data["content-length"]);
+        std::cout << "[Thread " << std::this_thread::get_id() << "] Content length: " << content_length << std::endl;
+        size_t body_bytes_received= request_data.length() - eoh_pos - EOH.length();
+        if (body_bytes_received >= content_length) 
+        {
+          body = request_data.substr(eoh_pos + 4, content_length);
+        }
+        else
+        {
+          body=request_data.substr(eoh_pos+4);
+
+          while(body.length()<content_length)
+          {
+            bytes_received=read(client_fd,buffer,sizeof(buffer));
+            if(bytes_received<=0)
+            {
+              std::cerr << "[Thread " << std::this_thread::get_id() << "] Connection closed by client or error" << std::endl;
+              keep_connection_alive = false;
+              break;
+            }
+            body.append(buffer,bytes_received);
+          }
+          // Trim body to exactly content_length if we read too much
+          if (body.length() > content_length) 
+          {
+            body.resize(content_length);
+          }
+        }
+      }
+    }
+    // Process the request
+    std::pair<std::string, bool> result = 
+    handle_connection(request_line, headers, body, directory);
+
+    std::string response = result.first;
+    bool connection_keepalive = result.second;
+
+    // Send response
+    if (!response.empty()) 
+    {
+        if (send(client_fd, response.c_str(), response.length(), 0) < 0) 
+        {
+            std::cerr << "[Thread " << std::this_thread::get_id() 
+                      << "] Failed to send response" << std::endl;
+            keep_connection_alive = false;
+        }
+    } 
     else 
     {
-      std::cout << "[Thread " << std::this_thread::get_id() << "] Sent response to FD=" << client_fd << std::endl;
+      keep_connection_alive = false; // Error in processing request
     }
-  }
-  else
-  {
-    std::cerr << "[Thread " << std::this_thread::get_id() << "] Handler failed for FD=" << client_fd << ", no response sent." << std::endl;
+
+    // Update keep_connection_alive based on Connection header
+    keep_connection_alive = keep_connection_alive && connection_keepalive;
   }
   close(client_fd);
   std::cout << "[Thread " << std::this_thread::get_id() << "] Finished, closed FD=" << client_fd << std::endl;
